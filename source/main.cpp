@@ -1,9 +1,14 @@
 ﻿#include "AIE.h"
 #include <iostream>
+#include <fstream>
+
+using namespace std;
 //initialize constants
 const int screenWidth = 780;
 const int screenHeight = 672;
 const char* gameTitle = "Pong";
+
+const int minScoreToWin = 10;
 
 
 enum GAMESTATES
@@ -11,6 +16,9 @@ enum GAMESTATES
 	MAINMENU,
 	HOWTOPLAY,
 	GAMEPLAY,
+	HIGHSCORES,
+	PLAYER1WIN,
+	PLAYER2WIN,
 	END
 };
 //structs
@@ -27,6 +35,7 @@ struct Paddle
 	unsigned int moveDownKey;
 	int heightExt;
 	int heightLow;
+	unsigned int score = 0;
 	void SetSize(float a_width, float a_height)
 	{
 		width = a_width;
@@ -50,7 +59,7 @@ struct Paddle
 		if (IsKeyDown(moveUpKey))
 		{
 			y += speed * a_deltaTime;
-			if (y +height * .5f >=heightExt)
+			if (y + height * .5f >= heightExt)
 			{
 				y = heightExt - height * .5f;
 			}
@@ -64,6 +73,14 @@ struct Paddle
 			}
 		}
 		MoveSprite(spriteID, x, y);
+	}
+	void AddScore(unsigned int a_score)
+	{
+		score += a_score;
+	}
+	void GetScore(char* a_result)
+	{
+		itoa(score, a_result, 10);
 	}
 };
 Paddle paddle1;
@@ -79,7 +96,6 @@ struct Ball
 	int heightLow;
 	float speedX;
 	float speedY;
-
 	void SetSize(float a_width, float a_height)
 	{
 		width = a_width;
@@ -108,10 +124,12 @@ struct Ball
 		if (x + width * .5f >= screenWidth)
 		{
 			x = screenWidth *.5f;
+			paddle1.AddScore(1);
 		}
 		if (x - width * .5f <= 0)
 		{
 			x = screenWidth *.5f;
+			paddle2.AddScore(1);
 		}
 	}
 	bool paddle1Collision()
@@ -142,18 +160,41 @@ struct Ball
 		}
 		return false;
 	}
+	void Update(float a_deltaTime)
+	{
+		if (x <= 0)
+		{
+			paddle2.AddScore(1);
+		}
+		else
+		{
+			if (x >= screenWidth)
+			{
+				paddle1.AddScore(1);
+			}
+		}
+	}
 };
 Ball ball;
 
+
+
+int mHighScore;
 GAMESTATES currentState = MAINMENU;
 void UpdateMainMenu();
 void UpdateGamePlay();
 void UpdateHowToPlay();
-int main( int argc, char* argv[] )
-{	
-    Initialise(screenWidth, screenHeight, false, gameTitle);
-    
-   //Player one drawing/creating
+void GameUI();
+void WriteHighScore();
+void LoadHighScore();
+
+int main(int argc, char* argv[])
+{
+	bool runGame = true;
+	Initialise(screenWidth, screenHeight, false, gameTitle);
+	//fstream file;
+
+	//Player one drawing/creating
 	paddle1.heightExt = screenHeight;
 	paddle1.SetPosition(50.f, screenHeight *.5f);
 	paddle1.SetSize(10.f, 120.f);
@@ -171,8 +212,8 @@ int main( int argc, char* argv[] )
 	SetBackgroundColour(SColour(0, 0, 0, 255));
 
 	//Ball
-	ball.speedX = 100.f;
-	ball.speedY = 100.f;
+	ball.speedX = 300.f;
+	ball.speedY = 300.f;
 	ball.heightExt = screenHeight;
 	ball.SetPosition(screenWidth *.5f, screenHeight * .5f);
 	ball.SetSize(20.f, 20.f);
@@ -180,8 +221,9 @@ int main( int argc, char* argv[] )
 	MoveSprite(ball.ballID, ball.x, ball.y);
 
 
-    do
-    {
+
+	do
+	{
 
 		ClearScreen();
 		float deltaTime = GetDeltaTime();
@@ -190,36 +232,92 @@ int main( int argc, char* argv[] )
 		{
 		case MAINMENU:
 			UpdateMainMenu();
+			if (IsKeyDown(256))
+			{
+				runGame = false;
+			}
 			break;
 		case HOWTOPLAY:
 			UpdateHowToPlay();
+			if (IsKeyDown(256))
+			{
+				runGame = false;
+			}
 			break;
 		case GAMEPLAY:
 			UpdateGamePlay();
+			if (IsKeyDown(256))
+			{
+				runGame = false;
+			}
+			if (paddle1.score == 10)
+			{
+				currentState = PLAYER1WIN;
+			}
+			if (paddle2.score == 10)
+			{
+				currentState = PLAYER2WIN;
+			}
+			break;
+		case HIGHSCORES:
+			DrawString("HIGH SCORE", screenWidth * .5f - 100.f, screenHeight *0.75f);
+			char buff[30];
+			DrawString(itoa(mHighScore, buff, 10), screenWidth *.5f - 25, screenHeight *.66f);
+			DrawString("Q to main menu", screenWidth *.375f, 50);
+			if (IsKeyDown('Q'))
+			{
+				currentState = MAINMENU;
+			}
+			break;
+		case PLAYER1WIN:
+			DrawString("Player One Has Won The Game! Press Q To Go To Main Menu", 10, screenHeight *.5f);
+			mHighScore = paddle1.score;
+			if (IsKeyDown('Q'))
+			{
+				currentState = MAINMENU;
+			}
+			break;
+		case PLAYER2WIN:
+			DrawString("Player Two Has Won The Game! Press Q To Go TO Main Menu", 10, screenHeight * .5f);
+			mHighScore = paddle2.score;
+			if (IsKeyDown('Q'))
+			{
+				currentState = MAINMENU;
+			}
 			break;
 		case END:
+			if (IsKeyDown(256))
+			{
+				runGame = false;
+			}
 			break;
 		default:
 			break;
 		}
 
-    } while(!FrameworkUpdate());
-	
-    Shutdown();
+	} while (!FrameworkUpdate() && runGame);
 
-    return 0;
+	Shutdown();
+
+	return 0;
 }
 
 void UpdateMainMenu()
 {
 	//Giving the options
 	DrawString("Play(P)", screenWidth *.375f, 500);
-	DrawString("How to Play(H)", screenWidth *.375f, 400);
+	DrawString("How to Play(Enter)", screenWidth *.375f, 400);
+	DrawString("High Scores(H)", screenWidth * .375f, 300);
+	DrawString("Quit(Esc)", screenWidth * .375f, 200);
 	if (IsKeyDown('P'))
 	{
 		currentState = GAMEPLAY;
 	}
 	if (IsKeyDown('H'))
+	{
+		currentState = HIGHSCORES;
+	}
+	if (IsKeyDown(257))
 	{
 		currentState = HOWTOPLAY;
 	}
@@ -253,12 +351,12 @@ void UpdateGamePlay()
 	float delta = GetDeltaTime();
 	//Player1
 	paddle1.Move(delta);
-	DrawSprite(paddle1.spriteID);
 	MoveSprite(paddle1.spriteID, paddle1.x, paddle1.y);
+	DrawSprite(paddle1.spriteID);
 	//Player2
-	paddle2.Move(delta); 
-	DrawSprite(paddle2.spriteID);
+	paddle2.Move(delta);
 	MoveSprite(paddle2.spriteID, paddle2.x, paddle2.y);
+	DrawSprite(paddle2.spriteID);
 
 	//Ball
 	ball.Move(delta);
@@ -273,5 +371,36 @@ void UpdateGamePlay()
 	{
 		ball.speedX *= -1;
 	}
-	
+
+	void LoadHighScore();
+	void WriteHighScore();
+	GameUI();
+
+}
+void GameUI()
+{
+	char paddle1Score[3];
+	char paddle2Score[3];
+	paddle1.GetScore(paddle1Score);
+	paddle2.GetScore(paddle2Score);
+	DrawString(paddle1Score, 30, screenHeight - 20);
+	DrawString(paddle2Score, screenWidth - 30, screenHeight - 20);
+
+}
+void LoadHighScore()
+{
+	fstream file;
+	file.open("file.txt", ios::in);
+	char buffer[10];
+	file.getline(buffer, 10);
+	mHighScore = atoi(buffer);
+	file.close();
+}
+
+void WriteHighScore()
+{
+	fstream file;
+	file.open("file.txt", ios::out);
+	file << mHighScore;
+	file.close();
 }
